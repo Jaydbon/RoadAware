@@ -27,7 +27,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   final pages = [
     AggressiveBrakingPage(),
-    PlaceholderPage(title: "GPS Page"),
+    GpsTestPage(),
     PlaceholderPage(title: "Settings"),
   ];
 

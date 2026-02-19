@@ -30,18 +30,23 @@ Future<bool> servicesEnabled() async {
 }
 
 
+
 class SpeedDetection {
-  Future<Position?> getGPS() async {
-    bool ok = await servicesEnabled();
-    if (!ok) return null;
+  Stream<Position>? _positionStream;
 
-    Position pos = await Geolocator.getCurrentPosition();
+  Stream<Position> startStream() {
+    const settings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 0, // update on every movement
+    );
 
-    print(pos.latitude);
-    print(pos.longitude);
-    print(pos.timestamp);
+    _positionStream = Geolocator.getPositionStream(locationSettings: settings);
+    return _positionStream!;
+  }
 
-    return pos; // <-- return the actual data
+  void stopStream() {
+    _positionStream = null;
   }
 }
+
 
