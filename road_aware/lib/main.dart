@@ -1,10 +1,6 @@
-// main.dart
-import 'dart:async';
+import 'brakeTest.dart';
+import 'gpsTest.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:sensors_plus/sensors_plus.dart';
-import 'braking_detection.dart';
-import 'package:csv/csv.dart';
 
 void main() {
   runApp(const AggressiveBrakingApp());
@@ -16,111 +12,63 @@ class AggressiveBrakingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: AggressiveBrakingPage(),
+      home: MainNavigation(),
     );
   }
 }
 
-class AggressiveBrakingPage extends StatefulWidget {
+class MainNavigation extends StatefulWidget {
   @override
-  State<AggressiveBrakingPage> createState() => _AggressiveBrakingPageState();
+  State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _AggressiveBrakingPageState extends State<AggressiveBrakingPage> {
-  late BrakingDetector detector;
+class _MainNavigationState extends State<MainNavigation> {
+  int _index = 0;
 
-  StreamSubscription? accelSub;
-  StreamSubscription? brakeSub;
-
-  double accelX = 0.0;
-  double accelY = 0.0;
-  double accelZ = 0.0;
-
-  bool isAggressive = false;
-  bool isSimulatingCSV = false;
-
-  @override
-  void initState() {
-    super.initState();
-
-    detector = BrakingDetector();
-
-    brakeSub = detector.brakingStream.listen((value) {
-      setState(() => isAggressive = value);
-    });
-
-    accelSub = accelerometerEventStream().listen((event) {
-      if (isSimulatingCSV) return; // ignore real data during simulation
-
-      setState(() {
-        accelX = event.x;
-        accelY = event.y;
-        accelZ = event.z;
-      });
-
-      detector.updateAcceleration(event.y);
-    });
-  }
-
-  @override
-  void dispose() {
-    accelSub?.cancel();
-    brakeSub?.cancel();
-    detector.dispose();
-    super.dispose();
-  }
-
-  Future<void> runCsvSimulation() async {
-    setState(() => isSimulatingCSV = true);
-
-    final raw = await rootBundle.loadString("assets/brakeData.csv");
-    final rows = const CsvToListConverter().convert(raw, eol: "\n");
-
-    for (int i = 1; i < rows.length; i++) {
-      final row = rows[i];
-
-      double x = row[1].toDouble();
-      double y = row[2].toDouble();
-      double z = row[3].toDouble();
-
-      setState(() {
-        accelX = x;
-        accelY = y;
-        accelZ = z;
-      });
-
-      detector.updateAcceleration(y);
-
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-
-    setState(() => isSimulatingCSV = false);
-  }
+  final pages = [
+    AggressiveBrakingPage(),
+    PlaceholderPage(title: "GPS Page"),
+    PlaceholderPage(title: "Settings"),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: isAggressive ? Colors.red : Colors.white,
-      appBar: AppBar(
-        title: const Text("Aggressive Braking Detector"),
+      body: pages[_index],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _index,
+        onTap: (i) => setState(() => _index = i),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.speed),
+            label: "Braking",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.location_on),
+            label: "GPS",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: "Settings",
+          ),
+        ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text("X: ${accelX.toStringAsFixed(2)} m/s²",
-                style: const TextStyle(fontSize: 22)),
-            Text("Y: ${accelY.toStringAsFixed(2)} m/s²",
-                style: const TextStyle(fontSize: 22)),
-            Text("Z: ${accelZ.toStringAsFixed(2)} m/s²",
-                style: const TextStyle(fontSize: 22)),
-            const SizedBox(height: 40),
+    );
+  }
+}
 
-            ElevatedButton(
-              onPressed: isSimulatingCSV ? null : runCsvSimulation,
-              child: const Text("Simulate From CSV"),
-            ),
-          ],
+class PlaceholderPage extends StatelessWidget {
+  final String title;
+  const PlaceholderPage({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: Center(
+        child: Text(
+          title,
+          style: const TextStyle(fontSize: 28),
         ),
       ),
     );

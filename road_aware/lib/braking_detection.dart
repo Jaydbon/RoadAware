@@ -4,8 +4,7 @@ import 'dart:async';
 class BrakingDetector {
   final double brakingThreshold;
   final double accelThreshold;
-  final StreamController<bool> _brakeController =
-      StreamController<bool>.broadcast();
+  final StreamController<bool> _brakeController = StreamController<bool>.broadcast();
 
   Stream<bool> get brakingStream => _brakeController.stream;
 
