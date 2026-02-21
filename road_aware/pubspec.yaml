@@ -33,6 +33,9 @@ dependencies:
   sensors_plus: ^7.0.0
   csv: ^6.0.0
   geolocator: ^14.0.2
+  sqflite: ^2.4.2
+  path: ^1.9.0
+  path_provider: ^2.1.5
   
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
