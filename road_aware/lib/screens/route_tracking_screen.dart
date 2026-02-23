@@ -1,13 +1,16 @@
+// route_tracking_screen.dart
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../widgets/app_drawer.dart';
 import '../db/repositories.dart';
 import '../gps_detection.dart';
 import '../braking_detection.dart';
+import '../map_widget.dart';
 
 class RouteTrackingScreen extends StatefulWidget {
   static const routeName = '/route';
@@ -34,10 +37,12 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
   int? tripId;
   bool tracking = false;
 
-  double? lat;
-  double? lon;
-  double speedKmh = 0;
+  // Shared with MapWidget
+  LatLng? currentPosition;
+  final List<LatLng> routePoints = [];
+  final List<LatLng> brakePoints = [];
 
+  double speedKmh = 0;
   int points = 0;
   bool aggressive = false;
 
@@ -46,7 +51,13 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     super.initState();
 
     brakeFlagSub = brakeDetector.brakingStream.listen((flag) async {
-      setState(() => aggressive = flag);
+      setState(() {
+        aggressive = flag;
+        // Add braking position to map when actively tracking
+        if (flag && tracking && currentPosition != null) {
+          brakePoints.add(currentPosition!);
+        }
+      });
 
       if (!tracking) return;
       final id = tripId;
@@ -57,8 +68,8 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
           tripId: id,
           type: 'brake',
           severity: 1.0,
-          lat: lat,
-          lon: lon,
+          lat: currentPosition?.latitude,
+          lon: currentPosition?.longitude,
           time: DateTime.now(),
         );
       }
@@ -71,6 +82,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     accelSub?.cancel();
     brakeFlagSub?.cancel();
     brakeDetector.dispose();
+    gps.stopStream();
     super.dispose();
   }
 
@@ -79,7 +91,8 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     if (!ok) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission / service not enabled')),
+          const SnackBar(
+              content: Text('Location permission / service not enabled')),
         );
       }
       return;
@@ -87,12 +100,18 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
 
     final id = await tripRepo.startTrip(simulated: false);
 
+    setState(() {
+      routePoints.clear();
+      brakePoints.clear();
+    });
+
     gpsSub = gps.startStream().listen((pos) async {
-      final kmh = (pos.speed.isNaN ? 0.0 : pos.speed) * 3.6; // m/s -> km/h
+      final kmh = (pos.speed.isNaN ? 0.0 : pos.speed) * 3.6;
+      final point = LatLng(pos.latitude, pos.longitude);
 
       setState(() {
-        lat = pos.latitude;
-        lon = pos.longitude;
+        currentPosition = point;
+        routePoints.add(point);
         speedKmh = kmh < 0 ? 0 : kmh;
       });
 
@@ -109,7 +128,6 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     });
 
     accelSub = accelerometerEventStream().listen((event) {
-      // 这里沿用你现在 brakeTest 的做法：用 event.y 做阈值检测
       brakeDetector.updateAcceleration(event.y);
     });
 
@@ -161,7 +179,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Map 占位（你现在没装 maps package）
+            // ── Map ───────────────────────────────────────────────────────
             Container(
               height: 320,
               width: double.infinity,
@@ -169,12 +187,11 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(),
               ),
-              child: Center(
-                child: Text(
-                  tracking ? 'Tracking...\n(points: $points)' : 'Map Placeholder',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 18),
-                ),
+              child: MapWidget(
+                currentPosition: currentPosition,
+                routePoints: routePoints,
+                brakePoints: brakePoints,
+                isRecording: tracking,
               ),
             ),
 
@@ -183,8 +200,12 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(lat == null ? 'Lat: --' : 'Lat: ${lat!.toStringAsFixed(5)}'),
-                Text(lon == null ? 'Lon: --' : 'Lon: ${lon!.toStringAsFixed(5)}'),
+                Text(currentPosition == null
+                    ? 'Lat: --'
+                    : 'Lat: ${currentPosition!.latitude.toStringAsFixed(5)}'),
+                Text(currentPosition == null
+                    ? 'Lon: --'
+                    : 'Lon: ${currentPosition!.longitude.toStringAsFixed(5)}'),
               ],
             ),
 
@@ -228,7 +249,17 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
                 Text(aggressive ? 'Aggressive event detected' : 'Normal'),
               ],
             ),
+            ElevatedButton(
+              onPressed: () async {
+                brakeDetector.updateAcceleration(-10.0);
+                await Future.delayed(const Duration(milliseconds: 500));
+                brakeDetector.updateAcceleration(0.0);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Test Brake Event'),
+            ),
           ],
+
         ),
       ),
     );
