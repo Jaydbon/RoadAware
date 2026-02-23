@@ -2,6 +2,11 @@ import 'brakeTest.dart';
 import 'gpsTest.dart';
 import 'package:flutter/material.dart';
 
+import 'screens/route_tracking_screen.dart';
+import 'screens/driving_history_screen.dart';
+import 'screens/driving_stats_screen.dart';
+
+
 void main() {
   runApp(const AggressiveBrakingApp());
 }
@@ -9,6 +14,24 @@ void main() {
 class AggressiveBrakingApp extends StatelessWidget {
   const AggressiveBrakingApp({super.key});
 
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Road Aware',
+      theme: ThemeData(useMaterial3: true),
+      routes: {
+        RouteTrackingScreen.routeName: (context) => const RouteTrackingScreen(),
+        DrivingHistoryScreen.routeName: (context) => const DrivingHistoryScreen(),
+        DrivingStatsScreen.routeName: (context) => const DrivingStatsScreen(),
+      },
+      initialRoute: RouteTrackingScreen.routeName,
+    );
+  }
+}
+
+
+
+/*
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -74,3 +97,5 @@ class PlaceholderPage extends StatelessWidget {
     );
   }
 }
+
+ */
