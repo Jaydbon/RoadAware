@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../main.dart';
 import '../db/repositories.dart';
 import '../widgets/trip_card.dart';
 import '../widgets/event_card.dart';
@@ -29,6 +30,16 @@ class _DrivingHistoryScreenState extends State<DrivingHistoryScreen> {
   void initState() {
     super.initState();
     _load();
+
+    final appState = AggressiveBrakingApp.of(context);
+    appState?.tripDataVersion.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    final appState = AggressiveBrakingApp.of(context);
+    appState?.tripDataVersion.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {

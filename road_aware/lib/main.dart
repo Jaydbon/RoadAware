@@ -28,6 +28,7 @@ class _AggressiveBrakingAppState extends State<AggressiveBrakingApp> {
   final ValueNotifier<bool> showTestBrakeButton = ValueNotifier<bool>(false);
   final ValueNotifier<bool> showTestAccelButton = ValueNotifier<bool>(false);
   final ValueNotifier<bool> isLeftHandedMode = ValueNotifier<bool>(false);
+  final ValueNotifier<int> tripDataVersion = ValueNotifier<int>(0);
 
   ThemeMode get themeMode => _themeMode;
 
@@ -49,11 +50,16 @@ class _AggressiveBrakingAppState extends State<AggressiveBrakingApp> {
     isLeftHandedMode.value = value;
   }
 
+  void notifyTripDataChanged() {
+    tripDataVersion.value = tripDataVersion.value + 1;
+  }
+
   @override
   void dispose() {
     showTestBrakeButton.dispose();
     showTestAccelButton.dispose();
     isLeftHandedMode.dispose();
+    tripDataVersion.dispose();
     super.dispose();
   }
 
@@ -91,7 +97,6 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // 默认中间 Route 页
   int _currentIndex = 1;
 
   void _openUserPanel() {

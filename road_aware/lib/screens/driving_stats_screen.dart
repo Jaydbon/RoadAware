@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../main.dart';
 import '../db/repositories.dart';
 
 class DrivingStatsScreen extends StatefulWidget {
@@ -26,6 +27,16 @@ class _DrivingStatsScreenState extends State<DrivingStatsScreen> {
   void initState() {
     super.initState();
     _load();
+
+    final appState = AggressiveBrakingApp.of(context);
+    appState?.tripDataVersion.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    final appState = AggressiveBrakingApp.of(context);
+    appState?.tripDataVersion.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {

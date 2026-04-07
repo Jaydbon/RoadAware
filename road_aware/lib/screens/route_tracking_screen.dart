@@ -195,6 +195,8 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     final score = await scoreService.computeScore(id);
     await tripRepo.updateScore(id, score);
 
+    AggressiveBrakingApp.of(context)?.notifyTripDataChanged();
+
     setState(() {
       tracking = false;
       tripId = null;
