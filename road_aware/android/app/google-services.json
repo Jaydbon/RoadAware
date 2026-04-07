@@ -12,7 +12,20 @@
           "package_name": "com.example.road_aware"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "835502822749-tvc13g8pvb7a3lcnm07j2edmg4pnpdfm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.road_aware",
+            "certificate_hash": "385740799d87d9225697194c906e528876d1ddfb"
+          }
+        },
+        {
+          "client_id": "835502822749-jit4icp26vac2b1f2tl354g1fjtpb7en.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB2NXgVyflj_9dthfIIZIhn64mWypfPOyI"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "835502822749-chl048r5c7hoc4dgm0vsmo9lrrra6pad.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "835502822749-66je8cevn2cdi3afvl8ii1ppv4605sq7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.roadAware"
+              }
+            }
+          ]
         }
       }
     }
