@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../db/repositories.dart';
+import 'occurrence_map_preview.dart';
 
-class EventCard extends StatelessWidget {
+class EventCard extends StatefulWidget {
   final EventRow event;
 
   const EventCard({
@@ -10,8 +11,17 @@ class EventCard extends StatelessWidget {
   });
 
   @override
+  State<EventCard> createState() => _EventCardState();
+}
+
+class _EventCardState extends State<EventCard> {
+  bool _showMap = false;
+
+  @override
   Widget build(BuildContext context) {
+    final event = widget.event;
     final isBrake = event.type == 'brake';
+    final hasLocation = event.lat != null && event.lon != null;
 
     return Card(
       elevation: 3,
@@ -32,7 +42,7 @@ class EventCard extends StatelessWidget {
 
             Text('Time: ${event.time}'),
 
-            if (event.lat != null && event.lon != null)
+            if (hasLocation)
               Text(
                 'Location: ${event.lat!.toStringAsFixed(5)}, ${event.lon!.toStringAsFixed(5)}',
               ),
@@ -54,6 +64,27 @@ class EventCard extends StatelessWidget {
                 ),
               ],
             ),
+
+            if (hasLocation) ...[
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _showMap = !_showMap;
+                  });
+                },
+                icon: Icon(_showMap ? Icons.map_outlined : Icons.location_on),
+                label: Text(_showMap ? 'Hide Map' : 'Show on Map'),
+              ),
+            ],
+
+            if (_showMap && hasLocation) ...[
+              const SizedBox(height: 8),
+              OccurrenceMapPreview(
+                lat: event.lat!,
+                lon: event.lon!,
+              ),
+            ],
           ],
         ),
       ),
@@ -65,6 +96,8 @@ class EventCard extends StatelessWidget {
       case 'brake':
         return 'Hard Braking';
       case 'accel':
+        return 'Aggressive Acceleration';
+      case 'acceleration':
         return 'Aggressive Acceleration';
       case 'overspeed':
         return 'Overspeed';

@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import '../screens/route_tracking_screen.dart';
 import '../screens/driving_history_screen.dart';
 import '../screens/driving_stats_screen.dart';
+import '../screens/settings_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
   void _go(BuildContext context, String route) {
-    Navigator.pop(context); // close drawer
+    Navigator.pop(context);
     if (ModalRoute.of(context)?.settings.name == route) return;
     Navigator.pushReplacementNamed(context, route);
   }
@@ -42,6 +43,11 @@ class AppDrawer extends StatelessWidget {
               leading: const Icon(Icons.insights),
               title: const Text('Driving Stats'),
               onTap: () => _go(context, DrivingStatsScreen.routeName),
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () => _go(context, SettingsScreen.routeName),
             ),
           ],
         ),
