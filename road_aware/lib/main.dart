@@ -23,7 +23,12 @@ class AggressiveBrakingApp extends StatefulWidget {
 class _AggressiveBrakingAppState extends State<AggressiveBrakingApp> {
   ThemeMode _themeMode = ThemeMode.light;
 
+  bool _showTestBrakeButton = false;
+  bool _showTestAccelButton = false;
+
   ThemeMode get themeMode => _themeMode;
+  bool get showTestBrakeButton => _showTestBrakeButton;
+  bool get showTestAccelButton => _showTestAccelButton;
 
   void setThemeMode(ThemeMode mode) {
     setState(() {
@@ -34,6 +39,18 @@ class _AggressiveBrakingAppState extends State<AggressiveBrakingApp> {
   void toggleDarkMode(bool isDark) {
     setState(() {
       _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    });
+  }
+
+  void toggleTestBrakeButton(bool value) {
+    setState(() {
+      _showTestBrakeButton = value;
+    });
+  }
+
+  void toggleTestAccelButton(bool value) {
+    setState(() {
+      _showTestAccelButton = value;
     });
   }
 

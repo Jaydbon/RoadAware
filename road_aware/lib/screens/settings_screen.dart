@@ -17,6 +17,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final appState = AggressiveBrakingApp.of(context);
     final bool isDark = appState?.themeMode == ThemeMode.dark;
+    final bool showTestBrake = appState?.showTestBrakeButton ?? false;
+    final bool showTestAccel = appState?.showTestAccelButton ?? false;
 
     return Scaffold(
       drawer: const AppDrawer(),
@@ -38,6 +40,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 appState?.toggleDarkMode(value);
                 setState(() {});
               },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.developer_mode),
+                  title: const Text('Developer Testing'),
+                  subtitle: const Text(
+                    'Show or hide test buttons on the Route Tracking page',
+                  ),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  title: const Text('Show Test Brake Button'),
+                  subtitle: const Text(
+                    'Display the developer button for simulated braking',
+                  ),
+                  value: showTestBrake,
+                  secondary: const Icon(Icons.car_crash),
+                  onChanged: (value) {
+                    appState?.toggleTestBrakeButton(value);
+                    setState(() {});
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Show Test Accel Button'),
+                  subtitle: const Text(
+                    'Display the developer button for simulated acceleration',
+                  ),
+                  value: showTestAccel,
+                  secondary: const Icon(Icons.speed),
+                  onChanged: (value) {
+                    appState?.toggleTestAccelButton(value);
+                    setState(() {});
+                  },
+                ),
+              ],
             ),
           ),
         ],
