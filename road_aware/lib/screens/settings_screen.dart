@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart';
-import '../widgets/app_drawer.dart';
 
 class SettingsScreen extends StatefulWidget {
   static const routeName = '/settings';
@@ -15,13 +14,10 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
-    final appState = AggressiveBrakingApp.of(context);
-    final bool isDark = appState?.themeMode == ThemeMode.dark;
-    final bool showTestBrake = appState?.showTestBrakeButton ?? false;
-    final bool showTestAccel = appState?.showTestAccelButton ?? false;
+    final appState = AggressiveBrakingApp.of(context)!;
+    final bool isDark = appState.themeMode == ThemeMode.dark;
 
     return Scaffold(
-      drawer: const AppDrawer(),
       appBar: AppBar(
         title: const Text('Settings'),
       ),
@@ -37,8 +33,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 isDark ? Icons.dark_mode : Icons.light_mode,
               ),
               onChanged: (value) {
-                appState?.toggleDarkMode(value);
+                appState.toggleDarkMode(value);
                 setState(() {});
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: appState.isLeftHandedMode,
+              builder: (context, isLeftHanded, _) {
+                return SwitchListTile(
+                  title: const Text('Left-handed Mode'),
+                  subtitle: const Text(
+                    'Move avatar, route status, speed and location to the left side',
+                  ),
+                  value: isLeftHanded,
+                  secondary: const Icon(Icons.front_hand),
+                  onChanged: (value) {
+                    appState.toggleLeftHandedMode(value);
+                  },
+                );
               },
             ),
           ),
@@ -46,36 +61,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Card(
             child: Column(
               children: [
-                ListTile(
-                  leading: const Icon(Icons.developer_mode),
-                  title: const Text('Developer Testing'),
-                  subtitle: const Text(
+                const ListTile(
+                  leading: Icon(Icons.developer_mode),
+                  title: Text('Developer Testing'),
+                  subtitle: Text(
                     'Show or hide test buttons on the Route Tracking page',
                   ),
                 ),
                 const Divider(height: 1),
-                SwitchListTile(
-                  title: const Text('Show Test Brake Button'),
-                  subtitle: const Text(
-                    'Display the developer button for simulated braking',
-                  ),
-                  value: showTestBrake,
-                  secondary: const Icon(Icons.car_crash),
-                  onChanged: (value) {
-                    appState?.toggleTestBrakeButton(value);
-                    setState(() {});
+                ValueListenableBuilder<bool>(
+                  valueListenable: appState.showTestBrakeButton,
+                  builder: (context, showTestBrake, _) {
+                    return SwitchListTile(
+                      title: const Text('Show Test Brake Button'),
+                      subtitle: const Text(
+                        'Display the developer button for simulated braking',
+                      ),
+                      value: showTestBrake,
+                      secondary: const Icon(Icons.car_crash),
+                      onChanged: (value) {
+                        appState.toggleTestBrakeButton(value);
+                      },
+                    );
                   },
                 ),
-                SwitchListTile(
-                  title: const Text('Show Test Accel Button'),
-                  subtitle: const Text(
-                    'Display the developer button for simulated acceleration',
-                  ),
-                  value: showTestAccel,
-                  secondary: const Icon(Icons.speed),
-                  onChanged: (value) {
-                    appState?.toggleTestAccelButton(value);
-                    setState(() {});
+                ValueListenableBuilder<bool>(
+                  valueListenable: appState.showTestAccelButton,
+                  builder: (context, showTestAccel, _) {
+                    return SwitchListTile(
+                      title: const Text('Show Test Accel Button'),
+                      subtitle: const Text(
+                        'Display the developer button for simulated acceleration',
+                      ),
+                      value: showTestAccel,
+                      secondary: const Icon(Icons.speed),
+                      onChanged: (value) {
+                        appState.toggleTestAccelButton(value);
+                      },
+                    );
                   },
                 ),
               ],

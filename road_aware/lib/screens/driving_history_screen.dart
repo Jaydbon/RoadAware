@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../db/repositories.dart';
-import '../widgets/app_drawer.dart';
 import '../widgets/trip_card.dart';
 import '../widgets/event_card.dart';
 
 class DrivingHistoryScreen extends StatefulWidget {
   static const routeName = '/history';
 
-  const DrivingHistoryScreen({super.key});
+  final VoidCallback onOpenUserPanel;
+
+  const DrivingHistoryScreen({
+    super.key,
+    required this.onOpenUserPanel,
+  });
 
   @override
   State<DrivingHistoryScreen> createState() => _DrivingHistoryScreenState();
@@ -45,6 +49,7 @@ class _DrivingHistoryScreenState extends State<DrivingHistoryScreen> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) {
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -71,25 +76,24 @@ class _DrivingHistoryScreenState extends State<DrivingHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: const AppDrawer(),
-      appBar: AppBar(title: const Text('Driving History')),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-        onRefresh: _load,
-        child: ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: trips.length,
-          itemBuilder: (context, i) {
-            final t = trips[i];
-            return TripCard(
-              trip: t,
-              onTap: () => _openTrip(t),
-            );
-          },
-        ),
-      ),
+    if (loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (trips.isEmpty) {
+      return const Center(child: Text('No trips recorded yet.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: trips.length,
+      itemBuilder: (context, index) {
+        final trip = trips[index];
+        return TripCard(
+          trip: trip,
+          onTap: () => _openTrip(trip),
+        );
+      },
     );
   }
 }

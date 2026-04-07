@@ -6,7 +6,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../main.dart';
-import '../widgets/app_drawer.dart';
 import '../db/repositories.dart';
 import '../gps_detection.dart';
 import '../braking_detection.dart';
@@ -15,7 +14,12 @@ import '../map_widget.dart';
 class RouteTrackingScreen extends StatefulWidget {
   static const routeName = '/route';
 
-  const RouteTrackingScreen({super.key});
+  final VoidCallback onOpenUserPanel;
+
+  const RouteTrackingScreen({
+    super.key,
+    required this.onOpenUserPanel,
+  });
 
   @override
   State<RouteTrackingScreen> createState() => _RouteTrackingScreenState();
@@ -47,6 +51,9 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
 
   bool isBraking = false;
   bool isAccelerating = false;
+
+  String? centerMessage;
+  Timer? centerMessageTimer;
 
   @override
   void initState() {
@@ -94,6 +101,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
 
   @override
   void dispose() {
+    centerMessageTimer?.cancel();
     gpsSub?.cancel();
     accelSub?.cancel();
     movementStateSub?.cancel();
@@ -102,16 +110,25 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     super.dispose();
   }
 
+  void _showCenterMessage(String message) {
+    centerMessageTimer?.cancel();
+
+    setState(() {
+      centerMessage = message;
+    });
+
+    centerMessageTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      setState(() {
+        centerMessage = null;
+      });
+    });
+  }
+
   Future<void> _start() async {
     final ok = await servicesEnabled();
     if (!ok) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permission / service not enabled'),
-          ),
-        );
-      }
+      _showCenterMessage('Location permission / service not enabled');
       return;
     }
 
@@ -121,6 +138,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
       routePoints.clear();
       brakePoints.clear();
       accelPoints.clear();
+      points = 0;
     });
 
     gpsSub = gps.startStream().listen((pos) async {
@@ -156,8 +174,9 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     setState(() {
       tripId = id;
       tracking = true;
-      points = 0;
     });
+
+    _showCenterMessage('Tracking started');
   }
 
   Future<void> _stop() async {
@@ -181,11 +200,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
       tripId = null;
     });
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Trip saved. Score = $score')),
-      );
-    }
+    _showCenterMessage('Trip saved. Score = $score');
   }
 
   Future<void> _runTestBrake() async {
@@ -203,146 +218,409 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
   String get _statusText {
     if (isBraking) return 'Hard Braking Detected!';
     if (isAccelerating) return 'Hard Acceleration Detected!';
-    return 'Normal';
+    if (tracking) return 'Tracking in progress';
+    return 'Ready to start';
+  }
+
+  Color _panelBackground(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark
+        ? Colors.black.withOpacity(0.65)
+        : Colors.white.withOpacity(0.72);
+  }
+
+  Color _primaryTextColor(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? Colors.white : Colors.black;
+  }
+
+  Color _secondaryTextColor(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? Colors.white70 : Colors.black87;
+  }
+
+  Widget _panel({
+    required BuildContext context,
+    required Widget child,
+    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  }) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: _panelBackground(context),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildTopBar({
+    required BuildContext context,
+    required bool isLeftHanded,
+    required Color primaryText,
+    required Color secondaryText,
+    required bool warning,
+  }) {
+    final statusCard = Expanded(
+      child: _panel(
+        context: context,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Route Tracking',
+              style: TextStyle(
+                color: primaryText,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _statusText,
+              style: TextStyle(
+                color: warning ? Colors.red.shade400 : secondaryText,
+                fontWeight: warning ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final avatarButton = GestureDetector(
+      onTap: widget.onOpenUserPanel,
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: _panelBackground(context),
+          shape: BoxShape.circle,
+        ),
+        child: CircleAvatar(
+          radius: 24,
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          child: Icon(
+            Icons.person,
+            size: 28,
+            color: primaryText,
+          ),
+        ),
+      ),
+    );
+
+    return Row(
+      children: isLeftHanded
+          ? [
+        avatarButton,
+        const SizedBox(width: 12),
+        statusCard,
+      ]
+          : [
+        statusCard,
+        const SizedBox(width: 12),
+        avatarButton,
+      ],
+    );
+  }
+
+  Widget _buildSpeedLocationGroup({
+    required BuildContext context,
+    required bool isLeftHanded,
+    required Color primaryText,
+    required Color secondaryText,
+    required String speedText,
+    required String latText,
+    required String lonText,
+  }) {
+    const double overlayWidth = 102;
+    const double overlayBottom = 10;
+    const double overlaySidePadding = 12;
+
+    return Positioned(
+      bottom: overlayBottom,
+      left: isLeftHanded ? overlaySidePadding : null,
+      right: isLeftHanded ? null : overlaySidePadding,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: overlayWidth,
+            height: overlayWidth,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _panelBackground(context),
+              border: Border.all(
+                color: Theme.of(context).dividerColor.withOpacity(0.35),
+                width: 2,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  speedText,
+                  style: TextStyle(
+                    color: primaryText,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'km/h',
+                  style: TextStyle(
+                    color: secondaryText,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: overlayWidth,
+            child: _panel(
+              context: context,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Location',
+                    style: TextStyle(
+                      color: secondaryText,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Lat: $latText',
+                    style: TextStyle(color: primaryText),
+                  ),
+                  Text(
+                    'Lon: $lonText',
+                    style: TextStyle(color: primaryText),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeveloperButtons({
+    required BuildContext context,
+    required bool isLeftHanded,
+    required bool showTestBrake,
+    required bool showTestAccel,
+    required Color primaryText,
+  }) {
+    return Positioned(
+      top: MediaQuery.of(context).size.height * 0.34,
+      left: isLeftHanded ? 12 : null,
+      right: isLeftHanded ? null : 12,
+      child: _panel(
+        context: context,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 10,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Dev',
+              style: TextStyle(
+                color: primaryText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (showTestBrake)
+              SizedBox(
+                width: 108,
+                child: ElevatedButton(
+                  onPressed: _runTestBrake,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                  ),
+                  child: const Text(
+                    'Test Brake',
+                    style: TextStyle(
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            if (showTestBrake && showTestAccel)
+              const SizedBox(height: 8),
+            if (showTestAccel)
+              SizedBox(
+                width: 108,
+                child: ElevatedButton(
+                  onPressed: _runTestAccel,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                  ),
+                  child: const Text(
+                    'Test Accel',
+                    style: TextStyle(
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final appState = AggressiveBrakingApp.of(context);
-    final bool showTestBrake = appState?.showTestBrakeButton ?? false;
-    final bool showTestAccel = appState?.showTestAccelButton ?? false;
+    final appState = AggressiveBrakingApp.of(context)!;
 
-    final speedText = speedKmh.toStringAsFixed(0);
-    final hasAggressiveEvent = isBraking || isAccelerating;
-    final bool showDeveloperRow = showTestBrake || showTestAccel;
+    final String latText = currentPosition == null
+        ? '--'
+        : currentPosition!.latitude.toStringAsFixed(5);
 
-    return Scaffold(
-      drawer: const AppDrawer(),
-      appBar: AppBar(
-        title: const Text('Route Tracking'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Container(
-              height: 320,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(),
-              ),
-              child: MapWidget(
-                currentPosition: currentPosition,
-                routePoints: routePoints,
-                brakePoints: brakePoints,
-                accelPoints: accelPoints,
-                isRecording: tracking,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  currentPosition == null
-                      ? 'Lat: --'
-                      : 'Lat: ${currentPosition!.latitude.toStringAsFixed(5)}',
-                ),
-                Text(
-                  currentPosition == null
-                      ? 'Lon: --'
-                      : 'Lon: ${currentPosition!.longitude.toStringAsFixed(5)}',
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: tracking ? _stop : _start,
-                    child: Text(tracking ? 'Stop Tracking' : 'Start Tracking'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  width: 72,
-                  height: 72,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(width: 2),
-                  ),
-                  child: Text(
-                    speedText,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: hasAggressiveEvent ? Colors.red : null,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(hasAggressiveEvent ? Icons.warning : Icons.check_circle),
-                const SizedBox(width: 8),
-                Text(
-                  _statusText,
-                  style: TextStyle(
-                    fontWeight: hasAggressiveEvent
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                    color: hasAggressiveEvent ? Colors.red : null,
-                  ),
-                ),
-              ],
-            ),
-            const Spacer(),
-            if (showDeveloperRow) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Developer Testing',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  if (showTestBrake)
-                    ElevatedButton(
-                      onPressed: _runTestBrake,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                      ),
-                      child: const Text(
-                        'Test Brake',
-                        style: TextStyle(color: Colors.white),
+    final String lonText = currentPosition == null
+        ? '--'
+        : currentPosition!.longitude.toStringAsFixed(5);
+
+    final String speedText = speedKmh.toStringAsFixed(0);
+    final bool warning = isBraking || isAccelerating;
+
+    return ValueListenableBuilder<bool>(
+      valueListenable: appState.showTestBrakeButton,
+      builder: (context, showTestBrake, _) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: appState.showTestAccelButton,
+          builder: (context, showTestAccel, _) {
+            return ValueListenableBuilder<bool>(
+              valueListenable: appState.isLeftHandedMode,
+              builder: (context, isLeftHanded, _) {
+                final bool showDeveloperButtons =
+                    showTestBrake || showTestAccel;
+                final Color primaryText = _primaryTextColor(context);
+                final Color secondaryText = _secondaryTextColor(context);
+
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: MapWidget(
+                        currentPosition: currentPosition,
+                        routePoints: routePoints,
+                        brakePoints: brakePoints,
+                        accelPoints: accelPoints,
+                        isRecording: tracking,
                       ),
                     ),
-                  if (showTestAccel)
-                    ElevatedButton(
-                      onPressed: _runTestAccel,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                      ),
-                      child: const Text(
-                        'Test Accel',
-                        style: TextStyle(color: Colors.white),
+                    SafeArea(
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            top: 10,
+                            left: 12,
+                            right: 12,
+                            child: _buildTopBar(
+                              context: context,
+                              isLeftHanded: isLeftHanded,
+                              primaryText: primaryText,
+                              secondaryText: secondaryText,
+                              warning: warning,
+                            ),
+                          ),
+                          _buildSpeedLocationGroup(
+                            context: context,
+                            isLeftHanded: isLeftHanded,
+                            primaryText: primaryText,
+                            secondaryText: secondaryText,
+                            speedText: speedText,
+                            latText: latText,
+                            lonText: lonText,
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 10,
+                            child: Center(
+                              child: SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: ElevatedButton(
+                                  onPressed: tracking ? _stop : _start,
+                                  style: ElevatedButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    tracking ? 'Stop' : 'Start',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (showDeveloperButtons)
+                            _buildDeveloperButtons(
+                              context: context,
+                              isLeftHanded: isLeftHanded,
+                              showTestBrake: showTestBrake,
+                              showTestAccel: showTestAccel,
+                              primaryText: primaryText,
+                            ),
+                          if (centerMessage != null)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: AnimatedOpacity(
+                                    opacity: centerMessage == null ? 0 : 1,
+                                    duration:
+                                    const Duration(milliseconds: 180),
+                                    child: Container(
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 36,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 16,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _panelBackground(context),
+                                        borderRadius:
+                                        BorderRadius.circular(18),
+                                      ),
+                                      child: Text(
+                                        centerMessage!,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: primaryText,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-          ],
-        ),
-      ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

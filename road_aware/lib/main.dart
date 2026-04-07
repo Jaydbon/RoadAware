@@ -4,6 +4,8 @@ import 'screens/route_tracking_screen.dart';
 import 'screens/driving_history_screen.dart';
 import 'screens/driving_stats_screen.dart';
 import 'screens/settings_screen.dart';
+import 'widgets/app_bottom_nav.dart';
+import 'widgets/user_side_panel.dart';
 
 void main() {
   runApp(const AggressiveBrakingApp());
@@ -23,18 +25,11 @@ class AggressiveBrakingApp extends StatefulWidget {
 class _AggressiveBrakingAppState extends State<AggressiveBrakingApp> {
   ThemeMode _themeMode = ThemeMode.light;
 
-  bool _showTestBrakeButton = false;
-  bool _showTestAccelButton = false;
+  final ValueNotifier<bool> showTestBrakeButton = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> showTestAccelButton = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> isLeftHandedMode = ValueNotifier<bool>(false);
 
   ThemeMode get themeMode => _themeMode;
-  bool get showTestBrakeButton => _showTestBrakeButton;
-  bool get showTestAccelButton => _showTestAccelButton;
-
-  void setThemeMode(ThemeMode mode) {
-    setState(() {
-      _themeMode = mode;
-    });
-  }
 
   void toggleDarkMode(bool isDark) {
     setState(() {
@@ -43,15 +38,23 @@ class _AggressiveBrakingAppState extends State<AggressiveBrakingApp> {
   }
 
   void toggleTestBrakeButton(bool value) {
-    setState(() {
-      _showTestBrakeButton = value;
-    });
+    showTestBrakeButton.value = value;
   }
 
   void toggleTestAccelButton(bool value) {
-    setState(() {
-      _showTestAccelButton = value;
-    });
+    showTestAccelButton.value = value;
+  }
+
+  void toggleLeftHandedMode(bool value) {
+    isLeftHandedMode.value = value;
+  }
+
+  @override
+  void dispose() {
+    showTestBrakeButton.dispose();
+    showTestAccelButton.dispose();
+    isLeftHandedMode.dispose();
+    super.dispose();
   }
 
   @override
@@ -70,13 +73,111 @@ class _AggressiveBrakingAppState extends State<AggressiveBrakingApp> {
         brightness: Brightness.dark,
         colorSchemeSeed: Colors.blue,
       ),
+      home: const AppShell(),
       routes: {
-        RouteTrackingScreen.routeName: (context) => const RouteTrackingScreen(),
-        DrivingHistoryScreen.routeName: (context) => const DrivingHistoryScreen(),
-        DrivingStatsScreen.routeName: (context) => const DrivingStatsScreen(),
         SettingsScreen.routeName: (context) => const SettingsScreen(),
       },
-      initialRoute: RouteTrackingScreen.routeName,
+    );
+  }
+}
+
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // 默认中间 Route 页
+  int _currentIndex = 1;
+
+  void _openUserPanel() {
+    final appState = AggressiveBrakingApp.of(context)!;
+    final bool isLeftHanded = appState.isLeftHandedMode.value;
+
+    if (isLeftHanded) {
+      _scaffoldKey.currentState?.openDrawer();
+    } else {
+      _scaffoldKey.currentState?.openEndDrawer();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = AggressiveBrakingApp.of(context)!;
+
+    return ValueListenableBuilder<bool>(
+      valueListenable: appState.isLeftHandedMode,
+      builder: (context, isLeftHanded, _) {
+        final pages = [
+          DrivingHistoryScreen(onOpenUserPanel: _openUserPanel),
+          RouteTrackingScreen(onOpenUserPanel: _openUserPanel),
+          DrivingStatsScreen(onOpenUserPanel: _openUserPanel),
+        ];
+
+        final titles = [
+          'Driving History',
+          'Route Tracking',
+          'Driving Stats',
+        ];
+
+        return Scaffold(
+          key: _scaffoldKey,
+          extendBody: true,
+          drawer: isLeftHanded ? const UserSidePanel() : null,
+          endDrawer: isLeftHanded ? null : const UserSidePanel(),
+          appBar: _currentIndex == 1
+              ? null
+              : AppBar(
+            title: Text(titles[_currentIndex]),
+            actions: isLeftHanded
+                ? null
+                : [
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: IconButton(
+                  onPressed: _openUserPanel,
+                  iconSize: 34,
+                  icon: const CircleAvatar(
+                    radius: 21,
+                    child: Icon(Icons.person, size: 24),
+                  ),
+                  tooltip: 'Open user menu',
+                ),
+              ),
+            ],
+            leading: isLeftHanded
+                ? Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: IconButton(
+                onPressed: _openUserPanel,
+                iconSize: 34,
+                icon: const CircleAvatar(
+                  radius: 21,
+                  child: Icon(Icons.person, size: 24),
+                ),
+                tooltip: 'Open user menu',
+              ),
+            )
+                : null,
+          ),
+          body: IndexedStack(
+            index: _currentIndex,
+            children: pages,
+          ),
+          bottomNavigationBar: AppBottomNav(
+            currentIndex: _currentIndex,
+            onChanged: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+          ),
+        );
+      },
     );
   }
 }
