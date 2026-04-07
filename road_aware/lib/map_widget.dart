@@ -6,14 +6,16 @@ class MapWidget extends StatefulWidget {
   final LatLng? currentPosition;
   final List<LatLng> routePoints;
   final List<LatLng> brakePoints;
+  final List<LatLng> accelPoints; 
   final bool isRecording;
 
   const MapWidget({
     super.key,
-    required this.currentPosition,
+    this.currentPosition,
     required this.routePoints,
     required this.brakePoints,
-    required this.isRecording,
+    required this.accelPoints, 
+    this.isRecording = false,
   });
 
   @override
@@ -93,6 +95,8 @@ class _MapWidgetState extends State<MapWidget> {
                 ),
               ],
             ),
+            
+          // --- BRAKING POINTS LAYER ---
           if (widget.brakePoints.isNotEmpty)
             MarkerLayer(
               markers: widget.brakePoints
@@ -105,6 +109,21 @@ class _MapWidgetState extends State<MapWidget> {
               ))
                   .toList(),
             ),
+            
+          // --- ACCELERATION POINTS LAYER (NEW) ---
+          if (widget.accelPoints.isNotEmpty)
+            MarkerLayer(
+              markers: widget.accelPoints
+                  .map((point) => Marker(
+                point: point,
+                width: 32,
+                height: 32,
+                child: const Icon(Icons.speed_rounded, 
+                    color: Colors.cyan, size: 28), // Blue icon for accel
+              ))
+                  .toList(),
+            ),
+
           if (widget.currentPosition != null)
             MarkerLayer(
               markers: [

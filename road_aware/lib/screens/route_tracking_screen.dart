@@ -32,7 +32,8 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
 
   StreamSubscription<Position>? gpsSub;
   StreamSubscription<AccelerometerEvent>? accelSub;
-  StreamSubscription<bool>? brakeFlagSub;
+  
+  StreamSubscription<({bool isBraking, bool isAccelerating})>? movementStateSub;
 
   int? tripId;
   bool tracking = false;
@@ -41,21 +42,30 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
   LatLng? currentPosition;
   final List<LatLng> routePoints = [];
   final List<LatLng> brakePoints = [];
+  final List<LatLng> accelPoints = []; // <-- NEW: List for acceleration points
 
   double speedKmh = 0;
   int points = 0;
-  bool aggressive = false;
+  
+  bool isBraking = false;
+  bool isAccelerating = false;
 
   @override
   void initState() {
     super.initState();
 
-    brakeFlagSub = brakeDetector.brakingStream.listen((flag) async {
+    movementStateSub = brakeDetector.stateStream.listen((state) async {
       setState(() {
-        aggressive = flag;
+        isBraking = state.isBraking;
+        isAccelerating = state.isAccelerating;
+        
         // Add braking position to map when actively tracking
-        if (flag && tracking && currentPosition != null) {
+        if (state.isBraking && tracking && currentPosition != null) {
           brakePoints.add(currentPosition!);
+        }
+        // Add acceleration position to map when actively tracking
+        if (state.isAccelerating && tracking && currentPosition != null) {
+          accelPoints.add(currentPosition!);
         }
       });
 
@@ -63,10 +73,19 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
       final id = tripId;
       if (id == null) return;
 
-      if (flag) {
+      if (state.isBraking) {
         await eventRepo.logEvent(
           tripId: id,
           type: 'brake',
+          severity: 1.0,
+          lat: currentPosition?.latitude,
+          lon: currentPosition?.longitude,
+          time: DateTime.now(),
+        );
+      } else if (state.isAccelerating) {
+        await eventRepo.logEvent(
+          tripId: id,
+          type: 'acceleration',
           severity: 1.0,
           lat: currentPosition?.latitude,
           lon: currentPosition?.longitude,
@@ -80,7 +99,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
   void dispose() {
     gpsSub?.cancel();
     accelSub?.cancel();
-    brakeFlagSub?.cancel();
+    movementStateSub?.cancel();
     brakeDetector.dispose();
     gps.stopStream();
     super.dispose();
@@ -103,6 +122,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     setState(() {
       routePoints.clear();
       brakePoints.clear();
+      accelPoints.clear(); // <-- Clear accel points on start
     });
 
     gpsSub = gps.startStream().listen((pos) async {
@@ -166,9 +186,16 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
     }
   }
 
+  String get _statusText {
+    if (isBraking) return 'Hard Braking Detected!';
+    if (isAccelerating) return 'Hard Acceleration Detected!';
+    return 'Normal';
+  }
+
   @override
   Widget build(BuildContext context) {
     final speedText = speedKmh.toStringAsFixed(0);
+    final hasAggressiveEvent = isBraking || isAccelerating;
 
     return Scaffold(
       drawer: const AppDrawer(),
@@ -179,7 +206,6 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ── Map ───────────────────────────────────────────────────────
             Container(
               height: 320,
               width: double.infinity,
@@ -191,6 +217,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
                 currentPosition: currentPosition,
                 routePoints: routePoints,
                 brakePoints: brakePoints,
+                accelPoints: accelPoints, // <-- NEW: Pass it to MapWidget
                 isRecording: tracking,
               ),
             ),
@@ -233,7 +260,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: aggressive ? Colors.red : null,
+                      color: hasAggressiveEvent ? Colors.red : null,
                     ),
                   ),
                 ),
@@ -244,22 +271,45 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
 
             Row(
               children: [
-                Icon(aggressive ? Icons.warning : Icons.check_circle),
+                Icon(hasAggressiveEvent ? Icons.warning : Icons.check_circle),
                 const SizedBox(width: 8),
-                Text(aggressive ? 'Aggressive event detected' : 'Normal'),
+                Text(
+                  _statusText, 
+                  style: TextStyle(
+                    fontWeight: hasAggressiveEvent ? FontWeight.bold : FontWeight.normal,
+                    color: hasAggressiveEvent ? Colors.red : null,
+                  )
+                ),
               ],
             ),
-            ElevatedButton(
-              onPressed: () async {
-                brakeDetector.updateAcceleration(-10.0);
-                await Future.delayed(const Duration(milliseconds: 500));
-                brakeDetector.updateAcceleration(0.0);
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Test Brake Event'),
+            
+            const Spacer(),
+            
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: () async {
+                    brakeDetector.updateAcceleration(-10.0);
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    brakeDetector.updateAcceleration(0.0);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Test Brake', style: TextStyle(color: Colors.white)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    brakeDetector.updateAcceleration(10.0);
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    brakeDetector.updateAcceleration(0.0);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                  child: const Text('Test Accel', style: TextStyle(color: Colors.white)),
+                ),
+              ],
             ),
+            const SizedBox(height: 16),
           ],
-
         ),
       ),
     );

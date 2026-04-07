@@ -21,12 +21,17 @@ class _MapPageState extends State<MapPage> {
   final BrakingDetector _brakeDetector = BrakingDetector();
 
   StreamSubscription<Position>? _gpsSub;
-  StreamSubscription<bool>? _brakeSub;
+  // Updated to handle the Record from the new BrakingDetector
+  StreamSubscription<({bool isBraking, bool isAccelerating})>? _movementSub;
   StreamSubscription? _accelSub;
 
   LatLng? _currentPosition;
   final List<LatLng> _routePoints = [];
   final List<LatLng> _brakePoints = [];
+  final List<LatLng> _accelPoints = []; // <-- ADDED THIS
+  
+  // Track acceleration count locally for the overlay
+  int _accelCount = 0;
 
   bool _isTracking = false;
   bool _isRecording = false;
@@ -41,7 +46,7 @@ class _MapPageState extends State<MapPage> {
   @override
   void dispose() {
     _accelSub?.cancel();
-    _brakeSub?.cancel();
+    _movementSub?.cancel();
     _gpsSub?.cancel();
     _brakeDetector.dispose();
     _gps.stopStream();
@@ -65,9 +70,16 @@ class _MapPageState extends State<MapPage> {
       });
     });
 
-    _brakeSub = _brakeDetector.brakingStream.listen((bool isBraking) {
-      if (isBraking && _isRecording && _currentPosition != null) {
-        setState(() => _brakePoints.add(_currentPosition!));
+    // Listen to the new stateStream containing the Record
+    _movementSub = _brakeDetector.stateStream.listen((state) {
+      if (_isRecording && _currentPosition != null) {
+        setState(() {
+          if (state.isBraking) _brakePoints.add(_currentPosition!);
+          if (state.isAccelerating) {
+            _accelCount++;
+            _accelPoints.add(_currentPosition!); // <-- ADDED THIS
+          }
+        });
       }
     });
 
@@ -83,8 +95,8 @@ class _MapPageState extends State<MapPage> {
     _gpsSub = null;
     _accelSub?.cancel();
     _accelSub = null;
-    _brakeSub?.cancel();
-    _brakeSub = null;
+    _movementSub?.cancel();
+    _movementSub = null;
     _gps.stopStream();
     setState(() {
       _isTracking = false;
@@ -96,6 +108,8 @@ class _MapPageState extends State<MapPage> {
     setState(() {
       _routePoints.clear();
       _brakePoints.clear();
+      _accelPoints.clear(); // <-- ADDED THIS
+      _accelCount = 0;
       if (_currentPosition != null) _routePoints.add(_currentPosition!);
       _isRecording = true;
     });
@@ -111,6 +125,8 @@ class _MapPageState extends State<MapPage> {
     setState(() {
       _routePoints.clear();
       _brakePoints.clear();
+      _accelPoints.clear(); // <-- ADDED THIS
+      _accelCount = 0;
     });
   }
 
@@ -127,21 +143,23 @@ class _MapPageState extends State<MapPage> {
       _isRecording = true;
       _routePoints.clear();
       _brakePoints.clear();
+      _accelPoints.clear(); // <-- ADDED THIS
+      _accelCount = 0;
     });
 
     _showSnack("Simulating route…");
 
     final String gpsRaw = await rootBundle.loadString("assets/gpsData.csv");
     final List<List<dynamic>> gpsRows =
-    const CsvToListConverter().convert(gpsRaw, eol: "\n");
+        const CsvToListConverter().convert(gpsRaw, eol: "\n");
 
     final String brakeRaw =
-    await rootBundle.loadString("assets/brakeData.csv");
+        await rootBundle.loadString("assets/brakeData.csv");
     final List<List<dynamic>> brakeRows =
-    const CsvToListConverter().convert(brakeRaw, eol: "\n");
+        const CsvToListConverter().convert(brakeRaw, eol: "\n");
 
     final int length =
-    gpsRows.length < brakeRows.length ? gpsRows.length : brakeRows.length;
+        gpsRows.length < brakeRows.length ? gpsRows.length : brakeRows.length;
 
     for (int i = 1; i < length; i++) {
       if (!_isSimulating) break;
@@ -154,13 +172,18 @@ class _MapPageState extends State<MapPage> {
 
       _brakeDetector.updateAcceleration(accelY);
 
-      final bool isBraking = accelY < _brakeDetector.brakingThreshold ||
-          accelY > _brakeDetector.accelThreshold;
+      // Separate braking and accelerating logic for the simulation
+      final bool isBraking = accelY < _brakeDetector.brakingThreshold;
+      final bool isAccelerating = accelY > _brakeDetector.accelThreshold;
 
       setState(() {
         _currentPosition = point;
         _routePoints.add(point);
         if (isBraking) _brakePoints.add(point);
+        if (isAccelerating) {
+          _accelCount++;
+          _accelPoints.add(point); // <-- ADDED THIS
+        }
       });
 
       await Future.delayed(const Duration(milliseconds: 200));
@@ -173,7 +196,7 @@ class _MapPageState extends State<MapPage> {
       });
       _showSnack(
         "Simulation complete. ${_routePoints.length} points, "
-            "${_brakePoints.length} braking event${_brakePoints.length == 1 ? '' : 's'}.",
+        "${_brakePoints.length} braking, $_accelCount accelerating.",
       );
     }
   }
@@ -217,6 +240,7 @@ class _MapPageState extends State<MapPage> {
             currentPosition: _currentPosition,
             routePoints: _routePoints,
             brakePoints: _brakePoints,
+            accelPoints: _accelPoints, 
             isRecording: _isRecording,
           ),
           Positioned(
@@ -226,6 +250,7 @@ class _MapPageState extends State<MapPage> {
               position: _currentPosition,
               pointCount: _routePoints.length,
               brakeCount: _brakePoints.length,
+              accelCount: _accelCount, 
               isRecording: _isRecording,
             ),
           ),
@@ -282,12 +307,14 @@ class _InfoOverlay extends StatelessWidget {
   final LatLng? position;
   final int pointCount;
   final int brakeCount;
+  final int accelCount;
   final bool isRecording;
 
   const _InfoOverlay({
     required this.position,
     required this.pointCount,
     required this.brakeCount,
+    required this.accelCount,
     required this.isRecording,
   });
 
@@ -317,6 +344,7 @@ class _InfoOverlay extends StatelessWidget {
           ] else
             const Text("Waiting for GPS…",
                 style: TextStyle(fontSize: 13, color: Colors.grey)),
+          
           if (isRecording) ...[
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -331,10 +359,12 @@ class _InfoOverlay extends StatelessWidget {
                   const SizedBox(width: 4),
                   Text("Recording · $pointCount pts",
                       style:
-                      const TextStyle(fontSize: 12, color: Colors.red)),
+                          const TextStyle(fontSize: 12, color: Colors.red)),
                 ],
               ),
             ),
+            
+            // Braking readout
             if (brakeCount > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
@@ -344,9 +374,27 @@ class _InfoOverlay extends StatelessWidget {
                         color: Colors.orange, size: 12),
                     const SizedBox(width: 4),
                     Text(
-                      "$brakeCount braking event${brakeCount == 1 ? '' : 's'}",
+                      "$brakeCount hard brake${brakeCount == 1 ? '' : 's'}",
                       style: const TextStyle(
                           fontSize: 12, color: Colors.orange),
+                    ),
+                  ],
+                ),
+              ),
+            
+            // Acceleration readout
+            if (accelCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    const Icon(Icons.speed_rounded,
+                        color: Colors.blueAccent, size: 12),
+                    const SizedBox(width: 4),
+                    Text(
+                      "$accelCount hard accel${accelCount == 1 ? '' : 's'}",
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.blueAccent),
                     ),
                   ],
                 ),
