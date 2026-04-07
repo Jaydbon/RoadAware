@@ -1,5 +1,6 @@
 // lib/db/repositories.dart
 import 'package:sqflite/sqflite.dart';
+import 'package:latlong2/latlong.dart'; // <-- Added for distance calculation
 import 'app_db.dart';
 
 class TripRepo {
@@ -81,24 +82,40 @@ class EventRepo {
 }
 
 class ScoreService {
-  // Simple and defensible scoring
-  // Start at 100, subtract penalties per event type, clamp 0..100.
+  // NEW: Distance-weighted deduction model
   Future<int> computeScore(int tripId) async {
     final counts = await EventRepo().eventCounts(tripId);
-
     final brakes = counts['brake'] ?? 0;
     final accels = counts['accel'] ?? 0;
-    final turns = counts['turn'] ?? 0;
-    final overspeed = counts['overspeed'] ?? 0;
 
-    int score = 100;
-    score -= brakes * 8;
-    score -= accels * 6;
-    score -= turns * 4;
-    score -= overspeed * 5;
+    // Fetch points to calculate total trip distance
+    final points = await RoutePointRepo().getRoutePoints(tripId);
+    double distanceInKm = 0.0;
+    const distanceTool = Distance();
 
+    if (points.length >= 2) {
+      for (int i = 0; i < points.length - 1; i++) {
+        final p1 = LatLng(points[i]['lat'] as double, points[i]['lon'] as double);
+        final p2 = LatLng(points[i+1]['lat'] as double, points[i+1]['lon'] as double);
+        distanceInKm += distanceTool.as(LengthUnit.Kilometer, p1, p2);
+      }
+    }
+
+    // Prevent division by zero for incredibly short trips by setting a 1km floor
+    if (distanceInKm < 1.0) distanceInKm = 1.0;
+
+    // Weight the penalties
+    double brakePenalty = brakes * 5.0;
+    double accelPenalty = accels * 3.0;
+    
+    // Divide penalties by distance traveled
+    double totalPenalty = (brakePenalty + accelPenalty) / distanceInKm;
+
+    int score = (100.0 - totalPenalty).round();
+    
     if (score < 0) score = 0;
     if (score > 100) score = 100;
+    
     return score;
   }
 }
@@ -215,5 +232,16 @@ class RoutePointRepo {
       [tripId],
     );
     return (rows.first['c'] as int?) ?? 0;
+  }
+
+  // NEW: Needed to calculate the distance of the trip
+  Future<List<Map<String, dynamic>>> getRoutePoints(int tripId) async {
+    final Database db = await AppDb.instance.db;
+    return await db.query(
+      'route_points',
+      where: 'trip_id = ?',
+      whereArgs: [tripId],
+      orderBy: 'timestamp ASC',
+    );
   }
 }
