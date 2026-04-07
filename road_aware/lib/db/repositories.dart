@@ -1,14 +1,25 @@
 // lib/db/repositories.dart
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:latlong2/latlong.dart'; // <-- Added for distance calculation
+import 'package:latlong2/latlong.dart';
 import 'app_db.dart';
+
+String _requireUserId() {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    throw StateError('No signed-in user found.');
+  }
+  return user.uid;
+}
 
 class TripRepo {
   Future<int> startTrip({required bool simulated}) async {
     final Database db = await AppDb.instance.db;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final userId = _requireUserId();
 
     final id = await db.insert('trips', {
+      'user_id': userId,
       'start_time': now,
       'end_time': null,
       'is_simulated': simulated ? 1 : 0,
@@ -21,22 +32,25 @@ class TripRepo {
   Future<void> endTrip(int tripId) async {
     final Database db = await AppDb.instance.db;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final userId = _requireUserId();
 
     await db.update(
       'trips',
       {'end_time': now},
-      where: 'id = ?',
-      whereArgs: [tripId],
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [tripId, userId],
     );
   }
 
   Future<void> updateScore(int tripId, int score) async {
     final Database db = await AppDb.instance.db;
+    final userId = _requireUserId();
+
     await db.update(
       'trips',
       {'score': score},
-      where: 'id = ?',
-      whereArgs: [tripId],
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [tripId, userId],
     );
   }
 }
@@ -44,7 +58,7 @@ class TripRepo {
 class EventRepo {
   Future<void> logEvent({
     required int tripId,
-    required String type, // 'brake' | 'accel' | ...
+    required String type,
     double? severity,
     double? lat,
     double? lon,
@@ -52,9 +66,11 @@ class EventRepo {
   }) async {
     final Database db = await AppDb.instance.db;
     final ts = (time ?? DateTime.now()).millisecondsSinceEpoch;
+    final userId = _requireUserId();
 
     await db.insert('events', {
       'trip_id': tripId,
+      'user_id': userId,
       'type': type,
       'severity': severity,
       'lat': lat,
@@ -65,13 +81,14 @@ class EventRepo {
 
   Future<Map<String, int>> eventCounts(int tripId) async {
     final Database db = await AppDb.instance.db;
+    final userId = _requireUserId();
 
     final rows = await db.rawQuery('''
       SELECT type, COUNT(*) AS c
       FROM events
-      WHERE trip_id = ?
+      WHERE trip_id = ? AND user_id = ?
       GROUP BY type
-    ''', [tripId]);
+    ''', [tripId, userId]);
 
     final out = <String, int>{};
     for (final r in rows) {
@@ -82,40 +99,40 @@ class EventRepo {
 }
 
 class ScoreService {
-  // NEW: Distance-weighted deduction model
   Future<int> computeScore(int tripId) async {
     final counts = await EventRepo().eventCounts(tripId);
     final brakes = counts['brake'] ?? 0;
     final accels = counts['accel'] ?? 0;
 
-    // Fetch points to calculate total trip distance
     final points = await RoutePointRepo().getRoutePoints(tripId);
     double distanceInKm = 0.0;
     const distanceTool = Distance();
 
     if (points.length >= 2) {
       for (int i = 0; i < points.length - 1; i++) {
-        final p1 = LatLng(points[i]['lat'] as double, points[i]['lon'] as double);
-        final p2 = LatLng(points[i+1]['lat'] as double, points[i+1]['lon'] as double);
+        final p1 = LatLng(
+          (points[i]['lat'] as num).toDouble(),
+          (points[i]['lon'] as num).toDouble(),
+        );
+        final p2 = LatLng(
+          (points[i + 1]['lat'] as num).toDouble(),
+          (points[i + 1]['lon'] as num).toDouble(),
+        );
         distanceInKm += distanceTool.as(LengthUnit.Kilometer, p1, p2);
       }
     }
 
-    // Prevent division by zero for incredibly short trips by setting a 1km floor
     if (distanceInKm < 1.0) distanceInKm = 1.0;
 
-    // Weight the penalties
-    double brakePenalty = brakes * 5.0;
-    double accelPenalty = accels * 3.0;
-    
-    // Divide penalties by distance traveled
-    double totalPenalty = (brakePenalty + accelPenalty) / distanceInKm;
+    final double brakePenalty = brakes * 5.0;
+    final double accelPenalty = accels * 3.0;
+    final double totalPenalty = (brakePenalty + accelPenalty) / distanceInKm;
 
     int score = (100.0 - totalPenalty).round();
-    
+
     if (score < 0) score = 0;
     if (score > 100) score = 100;
-    
+
     return score;
   }
 }
@@ -183,8 +200,12 @@ class EventRow {
 extension TripRepoQueries on TripRepo {
   Future<List<TripSummary>> latestTrips({int limit = 30}) async {
     final Database db = await AppDb.instance.db;
+    final userId = _requireUserId();
+
     final rows = await db.query(
       'trips',
+      where: 'user_id = ?',
+      whereArgs: [userId],
       orderBy: 'start_time DESC',
       limit: limit,
     );
@@ -195,10 +216,12 @@ extension TripRepoQueries on TripRepo {
 extension EventRepoQueries on EventRepo {
   Future<List<EventRow>> eventsForTrip(int tripId) async {
     final Database db = await AppDb.instance.db;
+    final userId = _requireUserId();
+
     final rows = await db.query(
       'events',
-      where: 'trip_id = ?',
-      whereArgs: [tripId],
+      where: 'trip_id = ? AND user_id = ?',
+      whereArgs: [tripId, userId],
       orderBy: 'timestamp DESC',
     );
     return rows.map(EventRow.fromRow).toList();
@@ -215,9 +238,11 @@ class RoutePointRepo {
   }) async {
     final Database db = await AppDb.instance.db;
     final ts = (time ?? DateTime.now()).millisecondsSinceEpoch;
+    final userId = _requireUserId();
 
     await db.insert('route_points', {
       'trip_id': tripId,
+      'user_id': userId,
       'lat': lat,
       'lon': lon,
       'speed': speed,
@@ -227,20 +252,23 @@ class RoutePointRepo {
 
   Future<int> pointCount(int tripId) async {
     final Database db = await AppDb.instance.db;
+    final userId = _requireUserId();
+
     final rows = await db.rawQuery(
-      'SELECT COUNT(*) AS c FROM route_points WHERE trip_id = ?',
-      [tripId],
+      'SELECT COUNT(*) AS c FROM route_points WHERE trip_id = ? AND user_id = ?',
+      [tripId, userId],
     );
     return (rows.first['c'] as int?) ?? 0;
   }
 
-  // NEW: Needed to calculate the distance of the trip
   Future<List<Map<String, dynamic>>> getRoutePoints(int tripId) async {
     final Database db = await AppDb.instance.db;
+    final userId = _requireUserId();
+
     return await db.query(
       'route_points',
-      where: 'trip_id = ?',
-      whereArgs: [tripId],
+      where: 'trip_id = ? AND user_id = ?',
+      whereArgs: [tripId, userId],
       orderBy: 'timestamp ASC',
     );
   }

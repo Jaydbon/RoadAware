@@ -89,7 +89,7 @@ class _RouteTrackingScreenState extends State<RouteTrackingScreen> {
       } else if (state.isAccelerating) {
         await eventRepo.logEvent(
           tripId: id,
-          type: 'acceleration',
+          type: 'accel',
           severity: 1.0,
           lat: currentPosition?.latitude,
           lon: currentPosition?.longitude,

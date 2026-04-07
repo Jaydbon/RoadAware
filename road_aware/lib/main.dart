@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:road_aware/screens/auth_gate.dart';
 
 import 'screens/route_tracking_screen.dart';
 import 'screens/driving_history_screen.dart';
@@ -7,7 +8,14 @@ import 'screens/settings_screen.dart';
 import 'widgets/app_bottom_nav.dart';
 import 'widgets/user_side_panel.dart';
 
-void main() {
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const AggressiveBrakingApp());
 }
 
@@ -79,7 +87,7 @@ class _AggressiveBrakingAppState extends State<AggressiveBrakingApp> {
         brightness: Brightness.dark,
         colorSchemeSeed: Colors.blue,
       ),
-      home: const AppShell(),
+      home: const AuthGate(),
       routes: {
         SettingsScreen.routeName: (context) => const SettingsScreen(),
       },

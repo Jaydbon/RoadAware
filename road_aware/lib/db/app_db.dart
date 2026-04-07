@@ -19,12 +19,12 @@ class AppDb {
 
     _db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
-        // Trips (session grouping)
         await db.execute('''
           CREATE TABLE trips (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
             start_time INTEGER NOT NULL,
             end_time INTEGER,
             is_simulated INTEGER NOT NULL DEFAULT 0,
@@ -32,11 +32,11 @@ class AppDb {
           );
         ''');
 
-        // Events (what your teammate requested)
         await db.execute('''
           CREATE TABLE events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             trip_id INTEGER NOT NULL,
+            user_id TEXT NOT NULL,
             type TEXT NOT NULL,
             severity REAL,
             lat REAL,
@@ -46,11 +46,11 @@ class AppDb {
           );
         ''');
 
-        // Optional: route points (safe to include now even if unused)
         await db.execute('''
           CREATE TABLE route_points (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             trip_id INTEGER NOT NULL,
+            user_id TEXT NOT NULL,
             lat REAL NOT NULL,
             lon REAL NOT NULL,
             speed REAL,
@@ -58,6 +58,19 @@ class AppDb {
             FOREIGN KEY(trip_id) REFERENCES trips(id) ON DELETE CASCADE
           );
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            "ALTER TABLE trips ADD COLUMN user_id TEXT NOT NULL DEFAULT ''",
+          );
+          await db.execute(
+            "ALTER TABLE events ADD COLUMN user_id TEXT NOT NULL DEFAULT ''",
+          );
+          await db.execute(
+            "ALTER TABLE route_points ADD COLUMN user_id TEXT NOT NULL DEFAULT ''",
+          );
+        }
       },
     );
 
