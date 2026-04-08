@@ -72,6 +72,31 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _submitGoogle() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await _authService.signInWithGoogle();
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _error = _friendlyErrorMessage(e);
+      });
+    } catch (_) {
+      setState(() {
+        _error = 'Google sign-in failed. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
   String _friendlyErrorMessage(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-email':
@@ -90,6 +115,8 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Too many attempts. Please try again later.';
       case 'network-request-failed':
         return 'Network error. Check your internet connection.';
+      case 'popup-closed-by-user':
+        return 'Google sign-in was cancelled.';
       default:
         return e.message ?? 'Authentication failed.';
     }
@@ -170,6 +197,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: ElevatedButton(
                         onPressed: _loading ? null : _submit,
                         child: Text(buttonText),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _loading ? null : _submitGoogle,
+                        icon: const Icon(Icons.login),
+                        label: const Text('Continue with Google'),
                       ),
                     ),
                     TextButton(
